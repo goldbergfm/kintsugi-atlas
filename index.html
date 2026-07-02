@@ -13,315 +13,292 @@
             background-color: #f5ebe0; 
             color: #2d2a29; 
             -webkit-tap-highlight-color: transparent;
-            transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
-        .title-font {
-            font-family: 'Instrument Sans', sans-serif;
-        }
-
+        .title-font { font-family: 'Instrument Sans', sans-serif; }
         .slide-bg {
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            transition: background-image 0.4s ease-in-out;
         }
 
-        .admin-mode [contenteditable="true"] {
-            outline: none;
-            background-color: rgba(184, 151, 117, 0.08);
-            border-bottom: 1px dashed #b89775;
-            border-radius: 4px;
-            padding: 2px 4px;
+        #pdf-loading {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(45,42,41,0.6);
+            backdrop-filter: blur(6px);
+            z-index: 500;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 14px;
+        }
+        #pdf-loading.active { display: flex; }
+        #pdf-loading-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #fdfcf7;
+            font-weight: 500;
+        }
+        .pdf-spinner {
+            width: 26px; height: 26px;
+            border: 2px solid rgba(253,252,247,0.15);
+            border-top-color: #b89775;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #pdf-render-target {
+            position: fixed;
+            left: -9999px;
+            top: 0;
+            width: 405px;
+            pointer-events: none;
+            z-index: -1;
+        }
+        #pdf-render-target article {
+            width: 405px !important;
+            height: 570px !important;
+            overflow: hidden;
         }
 
-        @media print {
-            @page {
-                size: 405px 570px;
-                margin: 0;
-            }
-            body {
-                background-color: #fffdfa !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            .no-print {
-                display: none !important;
-            }
-            main {
-                max-width: none !important;
-                width: 100% !important;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            article {
-                page-break-after: always !important;
-                break-after: page !important;
-                margin: 0 auto 0 auto !important;
-                border-radius: 0 !important;
-                width: 405px !important;
-                height: 570px !important;
-                box-shadow: none !important;
-                page-break-inside: avoid !important;
-            }
-        }
+        @media print { body { display: none; } }
     </style>
 </head>
-<body class="min-h-screen py-10 px-4 flex flex-col justify-between selection:bg-[#b89775]/20 selection:text-[#2d2a29]" id="body-root">
+<body class="min-h-screen py-10 px-4 flex flex-col gap-0 selection:bg-[#b89775]/20 selection:text-[#2d2a29]">
 
-    <div id="toast-notification" class="no-print fixed top-6 left-1/2 -translate-x-1/2 z-[200] bg-stone-900 text-stone-100 text-[11px] tracking-wider uppercase py-3 px-6 rounded-xl shadow-xl opacity-0 pointer-events-none transition-all duration-300">
-        данные скопированы
+    <div id="pdf-loading">
+        <div class="pdf-spinner"></div>
+        <div id="pdf-loading-text">подготовка конспекта...</div>
     </div>
 
-    <div id="confirm-modal" class="no-print fixed inset-0 z-[250] flex items-center justify-center bg-stone-900/40 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300">
-        <div class="bg-[#fffdfa] max-w-[360px] w-full p-8 rounded-2xl border border-stone-200/80 shadow-2xl text-center mx-4">
-            <h3 class="title-font text-lg font-semibold text-stone-900 lowercase mb-2">вернуть оригинал</h3>
-            <p class="text-xs leading-relaxed text-stone-600 font-light lowercase mb-6">это действие заменит все внесенные вами тексты и изображения на первоначальные настройки kintsugi*</p>
-            <div class="flex gap-3">
-                <button onclick="closeConfirmModal()" class="flex-1 py-2.5 text-[10px] tracking-widest uppercase rounded-xl bg-stone-100 text-stone-600 border border-stone-200 font-semibold focus:outline-none">отмена</button>
-                <button onclick="executeReset()" class="flex-1 py-2.5 text-[10px] tracking-widest uppercase rounded-xl bg-red-50 text-red-700 border border-red-200/40 font-semibold focus:outline-none">сбросить</button>
-            </div>
-        </div>
-    </div>
+    <div id="pdf-render-target"></div>
 
-    <header id="admin-panel" class="hidden no-print w-full max-w-[500px] mx-auto mb-12 flex flex-col items-center gap-6 bg-white/95 backdrop-blur-md p-6 rounded-3xl border border-[#b89775]/40 shadow-2xl">
-        <div class="text-center w-full">
-            <span class="text-[10px] tracking-[0.4em] uppercase text-[#b89775] font-bold block mb-1">kintsugi* · панель автора</span>
-            <h1 class="title-font text-xl font-semibold text-stone-900 tracking-tight lowercase mb-4">настройка контента</h1>
-            
-            <div class="grid grid-cols-4 gap-2 mb-6 bg-stone-900/5 p-1 rounded-xl border border-stone-200">
-                <button onclick="setWeek(1)" id="tab-week-1" class="py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase transition-all duration-300 bg-white text-stone-900 shadow-sm">нед 01</button>
-                <button onclick="setWeek(2)" id="tab-week-2" class="py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase transition-all duration-300 text-stone-500 hover:text-stone-800">нед 02</button>
-                <button onclick="setWeek(3)" id="tab-week-3" class="py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase transition-all duration-300 text-stone-500 hover:text-stone-800">нед 03</button>
-                <button onclick="setWeek(4)" id="tab-week-4" class="py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase transition-all duration-300 text-stone-500 hover:text-stone-800">нед 04</button>
-            </div>
+    <!-- ШАПКА -->
+    <header class="w-full max-w-[405px] mx-auto mb-10 flex flex-col items-center gap-5">
 
-            <div class="grid grid-cols-2 gap-4 text-left border-t border-stone-200/80 pt-4">
-                <div>
-                    <span class="text-[9px] tracking-wider uppercase text-stone-400 block mb-2">формат</span>
-                    <div class="flex gap-2">
-                        <button onclick="setFormat('book')" id="btn-fmt-book" class="px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-900 text-white font-semibold">книга</button>
-                        <button onclick="setFormat('square')" id="btn-fmt-square" class="px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-100 text-stone-600 border border-stone-200">квадрат</button>
-                    </div>
-                </div>
-                <div>
-                    <span class="text-[9px] tracking-wider uppercase text-stone-400 block mb-2">палитра</span>
-                    <div class="flex gap-2">
-                        <button onclick="setPalette('vanilla')" id="pal-vanilla" class="w-6 h-6 rounded-full bg-[#f5ebe0] border-2 border-stone-800 color-dot transform scale-110"></button>
-                        <button onclick="setPalette('chocolate')" id="pal-chocolate" class="w-6 h-6 rounded-full bg-[#2d1f18] border border-stone-300 color-dot"></button>
-                        <button onclick="setPalette('sage')" id="pal-sage" class="w-6 h-6 rounded-full bg-[#cfc5b4] border border-stone-300 color-dot"></button>
-                    </div>
-                </div>
-            </div>
+        <!-- Бренд -->
+        <div class="text-center w-full flex flex-col items-center gap-1">
+            <span class="text-[9px] tracking-[0.45em] uppercase text-stone-500 font-medium">рефлексия.fm · виктория голдберг</span>
+            <h1 class="title-font text-[13px] tracking-[0.25em] uppercase text-stone-800 font-semibold mt-1">kintsugi<span class="text-[#b89775]">*</span> · атлас безопасности</h1>
+            <p class="text-[10px] tracking-[0.2em] text-stone-400 uppercase font-light mt-0.5">тема месяца · безопасность</p>
         </div>
-        
-        <div class="flex gap-2 w-full border-t border-stone-200 pt-4">
-            <button onclick="localStorage.removeItem('kintsugi_atlas_store_v5'); location.reload();" class="flex-1 py-2.5 text-[9px] tracking-widest uppercase rounded-xl bg-red-50 text-red-700 border border-red-200 font-semibold">сбросить</button>
-            <button onclick="copyDataBackup()" class="flex-1 py-2.5 text-[9px] tracking-widest uppercase rounded-xl bg-stone-900 text-white font-semibold">скопировать код</button>
+
+        <!-- Разделитель -->
+        <div class="w-full h-[1px] bg-stone-300/50"></div>
+
+        <!-- Табы недель -->
+        <div class="flex w-full border-b border-stone-300/70" id="week-tabs"></div>
+
+        <!-- Подзаголовок -->
+        <div class="w-full text-center">
+            <p id="week-subtitle" class="title-font text-[16px] text-stone-500 font-light italic tracking-tight lowercase"></p>
         </div>
+
+        <!-- Кнопка PDF -->
+        <button onclick="exportPDF()" 
+            class="w-full py-3 text-[10px] tracking-widest uppercase rounded-xl bg-stone-900/8 border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all duration-300 font-semibold focus:outline-none">
+            скачать конспект · pdf
+        </button>
     </header>
 
-    <div class="w-full max-w-[405px] mx-auto mb-12 text-center no-print">
-        <span class="text-[12px] tracking-[0.4em] uppercase text-stone-700 font-bold block mb-1">kintsugi* · атлас безопасности</span>
-        <h2 id="public-week-title" class="title-font text-xl font-light text-stone-500 lowercase tracking-tight italic mt-2">чувства · тело знает первым</h2>
-        <span class="text-[9px] tracking-[0.2em] uppercase text-stone-400 block mt-2 font-medium">виктория голдберг · рефлексия.fm</span>
-    </div>
-
+    <!-- ЛЕНТА КАРТОЧЕК -->
     <main class="flex-grow w-full max-w-[1200px] mx-auto flex flex-col items-center">
-        <div id="slides-container" class="flex flex-col items-center gap-12 w-full"></div>
+        <div id="slides-container" class="flex flex-col items-center gap-10 w-full"></div>
     </main>
 
-    <footer class="no-print w-full max-w-[405px] mx-auto mt-16 flex flex-col items-center gap-4">
-        <button onclick="window.print()" class="py-2.5 px-6 text-[10px] tracking-widest uppercase rounded-xl bg-stone-900/5 border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-white transition-all font-medium">
-            сохранить конспект в pdf
-        </button>
-        <div class="w-full h-[1px] bg-stone-200 my-2"></div>
-        <div class="flex justify-between items-center w-full px-2 text-[9px] tracking-[0.3em] uppercase text-stone-400">
-            <div id="footer-week-badge">неделя 01</div>
-            <div onclick="handleSecretClick()" class="cursor-pointer hover:text-stone-900 transition-colors font-semibold" style="user-select: none;">kintsugi*</div>
+    <!-- ФУТЕР -->
+    <footer class="w-full max-w-[405px] mx-auto mt-14 flex flex-col items-center gap-4">
+        <div class="w-full h-[1px] bg-stone-300/50"></div>
+        <div class="flex justify-between items-center w-full px-1 text-[9px] tracking-[0.3em] uppercase text-stone-400">
+            <div id="footer-week-label">неделя 01</div>
+            <button onclick="exportPDF()" class="hover:text-stone-800 transition-colors duration-300 border-b border-stone-300/70 pb-px">скачать pdf</button>
+            <div>kintsugi*</div>
+        </div>
+        <div class="text-[9px] text-stone-400 tracking-[0.25em] uppercase font-light">
+            рефлексия.fm · виктория голдберг · 2026
         </div>
     </footer>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
-        const defaultContentData = {
-            1: {
-                title: "чувства · тело знает первым",
+        // ─── ДАННЫЕ ───────────────────────────────────────────────────────────────
+        const weeks = [
+            {
+                id: "week1",
+                label: "неделя 01",
+                tabLabel: "чувства",
+                subtitle: "тело знает первым",
                 slides: [
-                    { id: "s1", part: "01", badge: "состояние", title: "состояние раньше слов", text: "иногда телесное состояние появляется раньше, чем находятся слова для него.", question: "какое ощущение внутри пока остается непроизнесенным?", footer: "бессловесный опыт", previewBg: "https://images.unsplash.com/photo-1723639904965-2ec88c2163fc?q=80&w=1770&auto=format&fit=crop" },
-                    { id: "s2", part: "02", badge: "фон", title: "незаметная привычка", text: "к фоновому напряжению привыкаешь, как к температуре воздуха, которую перестаёшь замечать именно потому, что она есть всегда.", question: "какую фоновую температуру напряжения тело удерживает сейчас?", footer: "адаптация как норма", previewBg: "https://images.unsplash.com/photo-1494548162494-384bba4ab999?q=80&w=800" },
-                    { id: "s3", part: "03", badge: "контраст", title: "момент освобождения", text: "понимаешь, что такое этот фон, только после того, как напряжение в теле отпускает по-настоящему надолго.", question: "помнит ли тело состояние глубокого заземления?", footer: "точка отсчета", previewBg: "https://images.unsplash.com/photo-1772744874693-c86b6dd87af7?q=80&w=1770&auto=format&fit=crop" },
-                    { id: "s4", part: "04", badge: "емкость", title: "когда становится теснее", text: "многие живут в фоновом напряжении так долго, что перестают его замечать, пока что-то внутри снова не станет чуть теснее.", question: "в каких зонах сегодня чувствуется эта теснота?", footer: "границы выносливости", previewBg: "https://images.unsplash.com/photo-1534198730876-4bcab78c52f4?w=800&auto=format&fit=crop" },
-                    { id: "s5", part: "05", badge: "сжатие", title: "живот в напряжении", text: "живот может отреагировать сжатием в плотный узел раньше, чем успеваешь включить голову.", question: "о какой невысказанной тревоге говорит этот узел?", footer: "мгновенный отклик", previewBg: "https://images.unsplash.com/photo-1574708760360-280362d9de33?w=800&auto=format&fit=crop" },
-                    { id: "s6", part: "06", badge: "резонанс", title: "внутренняя скорость меньше", text: "рядом с некоторыми людьми внутренняя скорость падает, в животе отпускает, и тело оседает само по себе.", question: "рядом с кем твоё дыхание становится свободнее еще до начала разговора?", footer: "сонастройка систем", previewBg: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=800" },
-                    { id: "s7", part: "07", badge: "контакт", title: "скрытое напряжение", text: "бывает, что проводишь время с человеком живо и смеясь, а уже после замечаешь, что внутри всё это время держалось напряжение.", question: "какая часть тела оставалась начеку во время общения?", footer: "социальный щит", previewBg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800" }
+                    {
+                        part: "01", badge: "состояние",
+                        title: "тело знает первым",
+                        text: "живот в напряжении. в груди что-то сжалось. или горло — как будто что-то держит. причины ещё нет. а тело уже подаёт сигнал. я называю это фоном. не тревогой — именно фоном. когда он есть постоянно, перестаёшь замечать, что он вообще есть.",
+                        question: "что прямо сейчас происходит у тебя внутри — если не объяснять, а заметить?",
+                        footer: "фон становится нормой",
+                        bg: "https://images.unsplash.com/photo-1723639904965-2ec88c2163fc?q=80&w=1770&auto=format&fit=crop"
+                    },
+                    {
+                        part: "02", badge: "сигналы",
+                        title: "она знает сигналы",
+                        text: "температуру рук. частоту дыхания. есть ли рядом кто-то знакомый. можно ли выдохнуть до конца. она постоянно сканирует: здесь можно или нет. и всё, что мы называем тревогой, контролем, усталостью — часто это её ответ.",
+                        question: "что тело считает безопасным у тебя?",
+                        footer: "здесь можно или нет",
+                        bg: "https://images.unsplash.com/photo-1494548162494-384bba4ab999?q=80&w=800"
+                    },
+                    {
+                        part: "03", badge: "диагностика",
+                        title: "живот в напряжении",
+                        text: "всё спокойно. никакой явной угрозы снаружи нет. но внутри всё собрано в плотный узел. я долго думала, что это связано с ситуацией. потом заметила: живот реагирует раньше, чем я успеваю включить голову. это самая честная зона — здесь нет костной защиты.",
+                        question: "положи руку на живот. какой он сейчас — удерживает или движется с дыханием?",
+                        footer: "тело знает раньше",
+                        bg: "https://images.unsplash.com/photo-1772744874693-c86b6dd87af7?q=80&w=1770&auto=format&fit=crop"
+                    },
+                    {
+                        part: "04", badge: "резонанс",
+                        title: "внутренняя скорость меньше",
+                        text: "не потому что они делают что-то особенное. что-то считывается ещё до слов — и живот отпускает. дыхание становится свободнее. тело словно перестаёт ждать. мы привыкли объяснять это характером.",
+                        question: "рядом с кем твоё дыхание становится свободнее ещё до начала разговора?",
+                        footer: "тело считывает иначе",
+                        bg: "https://images.unsplash.com/photo-1534198730876-4bcab78c52f4?w=800&auto=format&fit=crop"
+                    },
+                    {
+                        part: "05", badge: "наблюдение",
+                        title: "оба варианта честные",
+                        text: "какие-то сигналы дошли до внимания, какие-то так и остались фоном. в какие моменты этой недели твоё тело само становилось спокойнее? что происходило вокруг в этот момент? что изменилось первым — ситуация или состояние тела?",
+                        question: "что изменилось первым — ситуация или напряжение в теле?",
+                        footer: "что изменилось первым",
+                        bg: "https://images.unsplash.com/photo-1574708760360-280362d9de33?w=800&auto=format&fit=crop"
+                    },
+                    {
+                        part: "06", badge: "внимание",
+                        title: "верить вниманию",
+                        text: "можно не менять темп, не пытаться дышать правильно. обратить внимание, как рёбра расходятся на вдохе и опадают на выдохе. твоя нервная система прямо сейчас считывает этот бережный жест внимания.",
+                        question: "можно побыть с этими ощущениями столько, сколько захочется.",
+                        footer: "присутствие достаточно",
+                        bg: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=800"
+                    },
+                    {
+                        part: "07", badge: "интеграция",
+                        title: "не снаружи. внутри",
+                        text: "нервная система всё время что-то решает. без нашего участия. раньше, чем мы успеваем это заметить. первое изменение редко начинается с исчезновения напряжения. чаще — с момента, когда впервые замечаешь его вовремя.",
+                        question: "что ты увидела о себе на этой неделе?",
+                        footer: "заметить — уже достаточно",
+                        bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800"
+                    }
                 ]
-            },
-            2: { title: "анатомия · каркас и фасции", slides: [] },
-            3: { title: "неделя 03 · карта безопасности", slides: [] },
-            4: { title: "неделя 04 · интеграция опыта", slides: [] }
-        };
-
-        let contentStore = JSON.parse(localStorage.getItem('kintsugi_atlas_store_v5')) || defaultContentData;
-        let activeWeek = 1;
-        let currentFormat = 'book'; 
-        let currentPalette = 'vanilla';
-        let secretClicks = 0;
-        let isAdmin = false;
-
-        function showToast(msg) {
-            const t = document.getElementById('toast-notification');
-            t.innerText = msg; t.style.opacity = '1';
-            setTimeout(() => t.style.opacity = '0', 2500);
-        }
-
-        function handleSecretClick() {
-            secretClicks++;
-            if (secretClicks >= 3) {
-                isAdmin = !isAdmin;
-                const panel = document.getElementById('admin-panel');
-                if (isAdmin) {
-                    panel.classList.remove('hidden');
-                    document.body.classList.add('admin-mode');
-                    showToast("режим автора включен");
-                } else {
-                    panel.classList.add('hidden');
-                    document.body.classList.remove('admin-mode');
-                }
-                secretClicks = 0;
-                renderLenta();
             }
+            // Неделя 2 добавляется сюда:
+            // { id: "week2", label: "неделя 02", tabLabel: "анатомия", subtitle: "анатомия · каркас и фасции", slides: [...] }
+        ];
+
+        let activeWeekIndex = 0;
+
+        // ─── РЕНДЕР ТАБОВ ─────────────────────────────────────────────────────────
+        function renderTabs() {
+            const container = document.getElementById('week-tabs');
+            container.innerHTML = weeks.map((w, i) => `
+                <button onclick="setWeek(${i})" 
+                    class="flex-1 text-center text-[10px] tracking-widest pb-2.5 border-b-2 transition-all duration-300 focus:outline-none uppercase font-semibold
+                    ${i === activeWeekIndex 
+                        ? 'border-stone-800 text-stone-900' 
+                        : 'border-transparent text-stone-400 hover:text-stone-700'}">
+                    ${w.tabLabel}
+                </button>
+            `).join('');
+            document.getElementById('week-subtitle').textContent = weeks[activeWeekIndex].subtitle;
+            document.getElementById('footer-week-label').textContent = weeks[activeWeekIndex].label;
         }
 
-        function updateSlideField(idx, field, val) {
-            contentStore[activeWeek].slides[idx][field] = val;
-            localStorage.setItem('kintsugi_atlas_store_v5', JSON.stringify(contentStore));
-        }
-
-        function copyDataBackup() {
-            const el = document.createElement('textarea');
-            el.value = document.documentElement.outerHTML;
-            document.body.appendChild(el); el.select();
-            document.execCommand('copy'); document.body.removeChild(el);
-            showToast("весь код скопирован для GitHub!");
-        }
-
-        function createCardHtml(slide, index) {
-            const bgGradient = 'linear-gradient(rgba(15, 12, 10, 0.15), rgba(15, 12, 10, 0.42))';
-            const cardHeight = currentFormat === 'square' ? 'h-[405px]' : 'h-[570px]';
-            const imgHeight = currentFormat === 'square' ? 'h-[160px]' : 'h-[210px]';
-            const textHeight = currentFormat === 'square' ? 'h-[245px]' : 'h-[360px]';
-
-            const urlInput = isAdmin 
-                ? `<div class="absolute inset-x-4 bottom-4 no-print z-50">
-                    <input type="text" value="${slide.previewBg}" oninput="updateSlideField(${index}, 'previewBg', this.value); this.closest('article').querySelector('.slide-bg').style.backgroundImage = 'linear-gradient(rgba(15, 12, 10, 0.15), rgba(15, 12, 10, 0.42)), url(\\''+this.value+'\\')'" class="w-full bg-black/80 text-stone-200 text-[10px] py-1 px-2 rounded focus:outline-none border border-stone-700"/>
-                   </div>` 
-                : '';
-
+        // ─── КАРТОЧКА ─────────────────────────────────────────────────────────────
+        function createCardHtml(slide) {
+            const grad = 'linear-gradient(rgba(15,12,10,0.16),rgba(15,12,10,0.46))';
             return `
-                <article class="w-full max-w-[405px] ${cardHeight} rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between relative border border-stone-200/40 shrink-0 card-theme">
-                    <div class="${imgHeight} w-full slide-bg relative overflow-hidden" style="background-image:${bgGradient}, url('${slide.previewBg}');">
-                        ${urlInput}
-                    </div>
-                    <div class="${textHeight} w-full p-7 flex flex-col justify-between content-theme">
-                        <header class="flex justify-between items-center text-[9px] tracking-[0.3em] uppercase text-stone-400 font-medium no-print">
-                            <div>${activeWeek === 1 ? 'чувства' : 'анатомия'}</div>
+                <article class="w-full max-w-[405px] h-[570px] rounded-2xl overflow-hidden shadow-2xl flex flex-col bg-[#fdfcf7] border border-stone-200/40 shrink-0">
+                    <div class="h-[210px] w-full shrink-0 slide-bg"
+                         style="background-image:${grad}, url('${slide.bg}');"></div>
+                    <div class="flex-1 w-full px-7 pt-5 pb-5 flex flex-col justify-between bg-[#fdfcf7]">
+                        <header class="flex justify-between items-center text-[9px] tracking-[0.3em] uppercase text-stone-400 font-medium">
+                            <div class="lowercase">атлас безопасности</div>
                             <div class="font-mono text-[#b89775] font-semibold">${slide.part}</div>
                         </header>
-                        <main class="my-auto">
-                            <span contenteditable="${isAdmin}" onblur="updateSlideField(${index}, 'badge', this.innerText)" class="text-[12px] font-semibold tracking-widest text-stone-400 uppercase block mb-1.5">${slide.badge}</span>
-                            <h2 contenteditable="${isAdmin}" onblur="updateSlideField(${index}, 'title', this.innerText)" class="title-font text-[28px] leading-[1.15] font-semibold tracking-tight mb-3.5 lowercase title-theme">${slide.title}</h2>
-                            <div class="w-full h-[1px] bg-stone-200/60 my-3.5 divider-theme"></div>
-                            <p contenteditable="${isAdmin}" onblur="updateSlideField(${index}, 'text', this.innerText)" class="text-[14px] leading-[1.8] text-stone-600 font-light lowercase mb-4 text-theme">${slide.text}</p>
-                            <div class="flex items-stretch gap-3 mb-2.5">
-                                <div class="w-[2px] bg-[#b89775] rounded-full"></div>
-                                <p contenteditable="${isAdmin}" onblur="updateSlideField(${index}, 'question', this.innerText)" class="text-[15px] leading-relaxed font-medium lowercase question-theme">${slide.question}</p>
+                        <main class="flex flex-col justify-center flex-1 py-3">
+                            <span class="text-[11px] font-semibold tracking-widest text-stone-400 uppercase block mb-1">${slide.badge}</span>
+                            <h2 class="title-font text-[26px] text-[#2d2a29] leading-[1.1] font-semibold tracking-tight mb-3 lowercase">${slide.title}</h2>
+                            <div class="w-full h-px bg-stone-200/60 mb-3"></div>
+                            <p class="text-[13px] leading-[1.75] text-stone-500 font-light lowercase mb-4">${slide.text}</p>
+                            <div class="flex items-stretch gap-3">
+                                <div class="w-[2px] bg-[#b89775] rounded-full shrink-0"></div>
+                                <p class="text-[14px] leading-relaxed text-[#2d2a29] font-medium lowercase">${slide.question}</p>
                             </div>
                         </main>
-                        <footer class="flex justify-between text-[9px] tracking-[0.2em] uppercase text-stone-400 border-t border-stone-200/60 pt-3 footer-border-theme no-print">
-                            <div contenteditable="${isAdmin}" onblur="updateSlideField(${index}, 'footer', this.innerText)" class="lowercase">${slide.footer}</div>
-                            <div>kintsugi*</div>
+                        <footer class="flex justify-between text-[9px] tracking-[0.2em] uppercase text-stone-300 border-t border-stone-100 pt-3">
+                            <div class="lowercase">${slide.footer}</div>
+                            <div class="font-medium text-stone-400">kintsugi*</div>
                         </footer>
                     </div>
                 </article>
             `;
         }
 
+        // ─── РЕНДЕР ЛЕНТЫ ─────────────────────────────────────────────────────────
         function renderLenta() {
-            const container = document.getElementById('slides-container');
-            const list = contentStore[activeWeek].slides;
-            
-            if (!list || list.length === 0) {
-                container.innerHTML = `<div class="text-stone-400 text-xs italic py-12 lowercase tracking-wider">этот раздел наполняется и откроется совсем скоро...</div>`;
-            } else {
-                container.innerHTML = list.map((s, i) => createCardHtml(s, i)).join('');
-            }
-            
-            document.getElementById('public-week-title').innerText = contentStore[activeWeek].title;
-            document.getElementById('footer-week-badge').innerText = `неделя 0${activeWeek}`;
-            applyPaletteStyles();
+            const week = weeks[activeWeekIndex];
+            document.getElementById('slides-container').innerHTML = 
+                week.slides.map(s => createCardHtml(s)).join('');
+            renderTabs();
         }
 
-        function setFormat(f) {
-            currentFormat = f;
-            document.getElementById('btn-fmt-book').className = f === 'book' ? "px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-900 text-white font-semibold" : "px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-100 text-stone-600 border border-stone-200";
-            document.getElementById('btn-fmt-square').className = f === 'square' ? "px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-900 text-white font-semibold" : "px-3 py-1.5 text-[9px] uppercase tracking-wider rounded-lg bg-stone-100 text-stone-600 border border-stone-200";
+        function setWeek(i) {
+            activeWeekIndex = i;
             renderLenta();
         }
 
-        function setPalette(p) {
-            currentPalette = p;
-            ['vanilla', 'chocolate', 'sage'].forEach(x => {
-                document.getElementById(`pal-${x}`).className = x === p ? "w-6 h-6 rounded-full border-2 border-stone-800 color-dot transform scale-110" : "w-6 h-6 rounded-full border border-stone-300 color-dot";
-            });
-            applyPaletteStyles();
-        }
+        // ─── PDF ЭКСПОРТ ──────────────────────────────────────────────────────────
+        async function exportPDF() {
+            const week = weeks[activeWeekIndex];
+            const loading = document.getElementById('pdf-loading');
+            const loadingText = document.getElementById('pdf-loading-text');
 
-        function applyPaletteStyles() {
-            const body = document.getElementById('body-root');
-            const cards = document.querySelectorAll('.card-theme');
-            const contents = document.querySelectorAll('.content-theme');
-            const titles = document.querySelectorAll('.title-theme');
-            const texts = document.querySelectorAll('.text-theme');
-            const questions = document.querySelectorAll('.question-theme');
-            const dividers = document.querySelectorAll('.divider-theme');
-            const footers = document.querySelectorAll('.footer-border-theme');
+            loading.classList.add('active');
+            loadingText.textContent = 'загрузка шрифтов...';
+            await document.fonts.ready;
 
-            if (currentPalette === 'vanilla') {
-                body.style.backgroundColor = '#f5ebe0'; body.style.color = '#2d2a29';
-                cards.forEach(c => c.style.backgroundColor = '#fffdfa');
-                contents.forEach(c => c.style.backgroundColor = '#fffdfa');
-                titles.forEach(t => t.style.color = '#2d2a29'); texts.forEach(t => t.style.color = '#4a4745');
-                questions.forEach(q => q.style.color = '#2d2a29'); dividers.forEach(d => d.style.backgroundColor = 'rgba(0,0,0,0.06)');
-                footers.forEach(f => f.style.borderTop = '1px solid rgba(0,0,0,0.06)');
-            } else if (currentPalette === 'chocolate') {
-                body.style.backgroundColor = '#1c140e'; body.style.color = '#fdf8f5';
-                cards.forEach(c => c.style.backgroundColor = '#261b14');
-                contents.forEach(c => c.style.backgroundColor = '#261b14');
-                titles.forEach(t => t.style.color = '#fdf8f5'); texts.forEach(t => t.style.color = '#d9d0cb');
-                questions.forEach(q => q.style.color = '#fdf8f5'); dividers.forEach(d => d.style.backgroundColor = 'rgba(255,255,255,0.08)');
-                footers.forEach(f => f.style.borderTop = '1px solid rgba(255,255,255,0.08)');
-            } else if (currentPalette === 'sage') {
-                body.style.backgroundColor = '#cfc5b4'; body.style.color = '#2d2a29';
-                cards.forEach(c => c.style.backgroundColor = '#f5f2eb');
-                contents.forEach(c => c.style.backgroundColor = '#f5f2eb');
-                titles.forEach(t => t.style.color = '#2d2a29'); texts.forEach(t => t.style.color = '#4e4a46');
-                questions.forEach(q => q.style.color = '#2d2a29'); dividers.forEach(d => d.style.backgroundColor = 'rgba(0,0,0,0.06)');
-                footers.forEach(f => f.style.borderTop = '1px solid rgba(0,0,0,0.06)');
+            const target = document.getElementById('pdf-render-target');
+            // Временно сохраняем activeWeekIndex для рендера карточек в target
+            target.innerHTML = week.slides.map(s => createCardHtml(s)).join('');
+            
+            // Ждём картинки
+            await new Promise(r => setTimeout(r, 1400));
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ unit: 'px', format: [405, 570], orientation: 'portrait' });
+            const slides = target.querySelectorAll('article');
+
+            for (let i = 0; i < slides.length; i++) {
+                loadingText.textContent = `карточка ${i + 1} из ${slides.length}...`;
+                const canvas = await html2canvas(slides[i], {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#fdfcf7',
+                    width: 405,
+                    height: 570,
+                    windowWidth: 405
+                });
+                if (i > 0) pdf.addPage([405, 570], 'portrait');
+                pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, 405, 570);
             }
+
+            pdf.save(`kintsugi-атлас-${week.id}-конспект.pdf`);
+            target.innerHTML = '';
+            loading.classList.remove('active');
         }
 
-        function setWeek(w) {
-            activeWeek = w;
-            for (let i = 1; i <= 4; i++) {
-                document.getElementById(`tab-week-${i}`).className = i === w ? "py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase bg-white text-stone-900 shadow-sm" : "py-2 text-[10px] tracking-widest font-semibold rounded-lg uppercase text-stone-500 hover:text-stone-800";
-            }
-            renderLenta();
-        }
-
-        window.onload = function() { setWeek(1); }
+        window.onload = () => renderLenta();
     </script>
 </body>
 </html>
-
